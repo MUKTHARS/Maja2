@@ -59,6 +59,11 @@ def clean_response_text(text: str) -> str:
     text = text.strip()
     return text
 
+def add_ending_credits(ai_reply: str) -> str:
+    """Add ending credits to the AI response"""
+    credits = "\n\n---\n*This response is AI-generated for informational purposes only and not a substitute for professional medical advice.*"
+    return ai_reply + credits
+
 def save_to_db_async(user_input: str, ai_response: str):
     """Background task to save query to database"""
     try:
@@ -76,32 +81,29 @@ async def chat_endpoint(request: Request, chat_request: ChatRequest, background_
     if not is_safe_query(chat_request.message):
         raise HTTPException(status_code=400, detail="Unsafe content detected. Please contact a mental health professional for immediate support.")
     
-    # Enhanced system prompt - explicitly forbid bold formatting
+    # Enhanced system prompt for DeepSeek-like formatting
     system_prompt = """
     You are a compassionate mental health AI assistant. Your role is to provide supportive,
     empathetic responses that promote mental wellbeing.
     
     FORMATTING REQUIREMENTS - FOLLOW EXACTLY:
     - Use clear numbering (1., 2., 3.) for main points
-    - Use proper bullet points (•) for sub-points
+    - Use proper bullet points (•) for sub-points, NOT hyphens
     - Use sub-bullets (◦) for nested points
     - Maintain consistent 4-space indentation for sub-points
     - Use proper line breaks between sections
-    - DO NOT use asterisks (*) for bold formatting or emphasis
-    - DO NOT use **bold text** around titles or any text
-    - Keep titles clean without special formatting
     - Structure should be hierarchical and clear
+    - Do NOT use asterisks (*) for emphasis
+    - Example format:
+        1. Main Point Title
+            • First sub-point with details
+            • Second sub-point
+                ◦ Nested detail if needed
+            • Third sub-point
     
-    Example format:
-        1. Prioritize Self-Care and Physical Well-being
-            • Ensure adequate sleep
-                ◦ Aim for 7-9 hours of quality sleep per night.
-                ◦ Establish a consistent sleep schedule.
-            • Nourish your body with a balanced diet
-    
-    2. Cultivate Emotional Awareness and Resilience
-            • Practice gratitude
-            • Identify and process your emotions
+    2. Another Main Point
+            • Sub-point one
+            • Sub-point two
 
     Always provide warm, empathetic responses while maintaining this clear structure.
     Always remind users that you're an AI and not a substitute for professional care.
@@ -142,8 +144,10 @@ async def chat_endpoint(request: Request, chat_request: ChatRequest, background_
             try:
                 data = resp.json()
                 raw_reply = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "I'm here to listen. Could you please tell me more about how you're feeling?")
-                # Clean the response text - remove bold asterisks
-                ai_reply = clean_response_text(raw_reply)
+                # Clean and format the response text
+                cleaned_reply = clean_response_text(raw_reply)
+                # Add ending credits
+                ai_reply = add_ending_credits(cleaned_reply)
             except Exception as e:
                 ai_reply = "I'm having trouble processing that right now. Could you try rephrasing your question?"
     except httpx.TimeoutException:
